@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "iwdg.h"
 #include "rtc.h"
 #include "spi.h"
 #include "tim.h"
@@ -147,7 +148,7 @@ void read_and_save_correct_time_after_sleep()
 	  HAL_RTC_SetTime(&hrtc, &RTC_Time1, RTC_FORMAT_BIN);
 }
 
-save_time_to_sleep()
+void save_time_to_sleep()
 {
 	RTC_TimeTypeDef currentTime;
 	RTC_DateTypeDef currentdate;
@@ -195,8 +196,9 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI2_Init();
   MX_TIM3_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_IWDG_Refresh(&hiwdg);
   read_and_save_correct_time_after_sleep();
 
 
@@ -214,7 +216,7 @@ int main(void)
 
 	    RTC_TimeTypeDef time;
 	    RTC_DateTypeDef date;
-	    for(int i=0;i<5;i++){
+	    for(int i=0;i<2;i++){
 	  	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
 	  	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
 	  	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
@@ -281,6 +283,7 @@ int main(void)
 	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
 	  while(flag==2){
 		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
+		  HAL_IWDG_Refresh(&hiwdg);
 		  if (value != prev_value) {
 			  //printf("value = %d\n", value);
 			  i++;
@@ -322,32 +325,19 @@ int main(void)
 
   __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU); //clear wake-up flag before entry standby mode
   HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1_LOW);
-
   printf("Going sleep...\n");
-
+  HAL_IWDG_Refresh(&hiwdg);
+  IWDG_STDBY_FREEZE;
+  IWDG_STOP_FREEZE;
   save_time_to_sleep();
   HAL_PWR_EnterSTANDBYMode();
-  //int16_t prev_value = 0;
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-/*
-	  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
-	    if (value != prev_value) {
-	      printf("value = %d\n", value);
-	      prev_value = value;
-	    }
-*/
-	  /*
-	  if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_SET){
-		  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-	  }
-	  else HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-	  */
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -379,8 +369,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSE|RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_LSE
+                              |RCC_OSCILLATORTYPE_MSI;
   RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
   RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_7;
