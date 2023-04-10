@@ -105,14 +105,57 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	  if(flag==0) {
 		  flag=1;
 		  printf("Set flag 1\n");
-		  HAL_Delay(100);
+		  HAL_Delay(200);
 	  }
 	  else if(flag==1) {
 		  flag=2;
 		  printf("Set flag 2\n");
-		  HAL_Delay(100);
+		  HAL_Delay(200);
+	  }
+	  else if (flag==2){
+		  flag=0;
 	  }
   }
+}
+
+void read_and_save_correct_time_after_sleep()
+{
+	  RTC_TimeTypeDef RTC_Time1;
+	  RTC_Time1.Hours = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
+	  RTC_Time1.Minutes = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2);
+	  RTC_Time1.Seconds = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3);
+
+	  RTC_TimeTypeDef RTC_Time2;
+	  RTC_DateTypeDef RTC_Date2;
+	  HAL_RTC_GetTime(&hrtc, &RTC_Time2, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &RTC_Date2, RTC_FORMAT_BIN);
+
+	  uint32_t seconds_slept = ((RTC_Time2.Seconds - RTC_Time1.Seconds) +
+	                           ((RTC_Time2.Minutes - RTC_Time1.Minutes) * 60) +
+	                           ((RTC_Time2.Hours - RTC_Time1.Hours) * 3600));
+	  RTC_Time1.Seconds=RTC_Time1.Seconds+seconds_slept;
+	  if(RTC_Time1.Seconds>60){
+		  RTC_Time1.Seconds=RTC_Time1.Seconds-60;
+		  RTC_Time1.Minutes=RTC_Time1.Minutes+1;
+		  if(RTC_Time1.Minutes>60){
+			  RTC_Time1.Minutes=RTC_Time1.Minutes-60;
+			  RTC_Time1.Hours=RTC_Time1.Hours+1;
+			  if(RTC_Time1.Hours>23) RTC_Time1.Hours=0;
+		  }
+	  }
+	  // Set the saved time back to RTC
+	  HAL_RTC_SetTime(&hrtc, &RTC_Time1, RTC_FORMAT_BIN);
+}
+
+save_time_to_sleep()
+{
+	RTC_TimeTypeDef currentTime;
+	RTC_DateTypeDef currentdate;
+	HAL_RTC_GetTime(&hrtc, &currentTime, RTC_FORMAT_BIN);
+	HAL_RTC_GetDate(&hrtc, &currentdate, RTC_FORMAT_BIN);
+	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, currentTime.Hours);
+	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, currentTime.Minutes);
+	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, currentTime.Seconds);
 }
 
 
@@ -154,10 +197,10 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
+  read_and_save_correct_time_after_sleep();
+
 
   /*** check if the SB flag i set ***/
-
-
   if (__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
   {
 	  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB); //clear the flag (flag of low power mode)
@@ -186,21 +229,94 @@ int main(void)
   }
 
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+  /*SET HOURS*/
   if(flag==1){
 	  printf("Entering first procedure!\n");
 	  HAL_Delay(100);
-	  int16_t prev_value = 0;
+	  int16_t prev_value=0;
+	  uint8_t i=0;
+	  RTC_TimeTypeDef time;
+	  RTC_DateTypeDef date;
+	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
 	  while(flag==1){
 		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
 		  if (value != prev_value) {
-			  printf("value = %d\n", value);
+			  //printf("value = %d\n", value);
+			  i++;
+			  if(value==prev_value+1){
+				  if(i==2)
+				  {
+					  time.Hours=time.Hours+1;
+					  if(time.Hours==24) time.Hours=0;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Hours: %d\n", time.Hours);
+					  i=0;
+				  }
+			  }
+			  if(value==prev_value-1){
+				  if(i==2)
+				  {
+					  time.Hours=time.Hours-1;
+					  if(time.Hours==255) time.Hours=23;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Hours: %d\n", time.Hours);
+					  i=0;
+				  }
+			  }
 			  prev_value = value;
 		  }
 	  }
   }
 
+/*SET MINUTES*/
   if(flag==2){
 	  printf("Entering second procedure!\n");
+	  HAL_Delay(100);
+	  int16_t prev_value=0;
+	  uint8_t i=0;
+	  RTC_TimeTypeDef time;
+	  RTC_DateTypeDef date;
+	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  while(flag==2){
+		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
+		  if (value != prev_value) {
+			  //printf("value = %d\n", value);
+			  i++;
+			  if(value==prev_value+1){
+				  if(i==2)
+				  {
+					  time.Minutes=time.Minutes+1;
+					  if(time.Minutes==60) time.Minutes=0;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Minutes: %d\n", time.Minutes);
+					  i=0;
+				  }
+			  }
+			  if(value==prev_value-1){
+				  if(i==2)
+				  {
+					  time.Minutes=time.Minutes-1;
+					  if(time.Minutes==255) time.Minutes=59;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Minutes: %d\n", time.Minutes);
+					  i=0;
+				  }
+			  }
+			  prev_value = value;
+		  }
+	  }
+
+
+	    for(int i=0;i<1;i++){
+		    RTC_TimeTypeDef time;
+		    RTC_DateTypeDef date;
+	  	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
+	  	  HAL_Delay(100);
+	    }
   }
 
 
@@ -208,6 +324,8 @@ int main(void)
   HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1_LOW);
 
   printf("Going sleep...\n");
+
+  save_time_to_sleep();
   HAL_PWR_EnterSTANDBYMode();
   //int16_t prev_value = 0;
 
