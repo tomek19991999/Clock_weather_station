@@ -21,6 +21,7 @@
 #include "i2c.h"
 #include "rtc.h"
 #include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -29,11 +30,6 @@
 #include "stdio.h"
 #include "lps25hb.h"
 
-
-/*
- PINOUT
-
- */
 
 
 /* USER CODE END Includes */
@@ -98,6 +94,29 @@ int __io_putchar(int ch)
   return 1;
 }
 
+volatile uint8_t flag = 0;
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+
+  if (GPIO_Pin == USER_BUTTON_Pin) {
+	  printf("Enter interrupt!\n");
+	  HAL_Delay(100);
+	  if(flag==0) {
+		  flag=1;
+		  printf("Set flag 1\n");
+		  HAL_Delay(100);
+	  }
+	  else if(flag==1) {
+		  flag=2;
+		  printf("Set flag 2\n");
+		  HAL_Delay(100);
+	  }
+  }
+}
+
+
+
 /* USER CODE END 0 */
 
 /**
@@ -132,10 +151,13 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   MX_SPI2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
 
   /*** check if the SB flag i set ***/
+
+
   if (__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
   {
 	  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB); //clear the flag (flag of low power mode)
@@ -162,15 +184,32 @@ int main(void)
 	    Error_Handler();
 	  }
   }
-  if(PWR_WAKEUP_PIN1==SET){
-	  printf("PA0 SET\n");
+
+  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+  if(flag==1){
+	  printf("Entering first procedure!\n");
+	  HAL_Delay(100);
+	  int16_t prev_value = 0;
+	  while(flag==1){
+		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
+		  if (value != prev_value) {
+			  printf("value = %d\n", value);
+			  prev_value = value;
+		  }
+	  }
   }
+
+  if(flag==2){
+	  printf("Entering second procedure!\n");
+  }
+
+
   __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU); //clear wake-up flag before entry standby mode
+  HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1_LOW);
 
-  HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1);
-
+  printf("Going sleep...\n");
   HAL_PWR_EnterSTANDBYMode();
-
+  //int16_t prev_value = 0;
 
   /* USER CODE END 2 */
 
@@ -178,6 +217,19 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+/*
+	  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
+	    if (value != prev_value) {
+	      printf("value = %d\n", value);
+	      prev_value = value;
+	    }
+*/
+	  /*
+	  if (HAL_GPIO_ReadPin(USER_BUTTON_GPIO_Port, USER_BUTTON_Pin) == GPIO_PIN_SET){
+		  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+	  }
+	  else HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+	  */
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
