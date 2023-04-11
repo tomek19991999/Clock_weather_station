@@ -1,0 +1,8 @@
+lcd.c:39:13:lcd_cmd	1
+lcd.c:48:13:lcd_data	1
+lcd.c:57:13:lcd_send	2
+lcd.c:89:13:lcd_data16	1
+lcd.c:96:13:lcd_set_window	1
+lcd.c:110:6:lcd_init	2
+lcd.c:131:6:lcd_put_pixel	1
+lcd.c:136:6:lcd_copy	1

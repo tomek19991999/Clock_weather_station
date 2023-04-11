@@ -30,7 +30,9 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "lps25hb.h"
-
+#include "hagl.h"
+#include "font6x9.h"
+#include "rgb565.h"
 
 
 /* USER CODE END Includes */
@@ -101,21 +103,28 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 
   if (GPIO_Pin == USER_BUTTON_Pin) {
-	  printf("Enter interrupt!\n");
-	  HAL_Delay(100);
-	  if(flag==0) {
-		  flag=1;
-		  printf("Set flag 1\n");
-		  HAL_Delay(200);
+	  static uint32_t last_interrupt_time = 0;
+	  uint32_t current_interrupt_time = HAL_GetTick();
+	  // button filter ( 100ms)
+	  if ((current_interrupt_time - last_interrupt_time) > 300) {
+		  last_interrupt_time = current_interrupt_time;
+		  printf("Enter interrupt!\n");
+		  HAL_Delay(100);
+		  if(flag==0) {
+			  flag=1;
+			  printf("Set flag 1\n");
+			  HAL_Delay(200);
+		  }
+		  else if(flag==1) {
+			  flag=2;
+			  printf("Set flag 2\n");
+			  HAL_Delay(200);
+		  }
+		  else if (flag==2){
+			  flag=0;
+
 	  }
-	  else if(flag==1) {
-		  flag=2;
-		  printf("Set flag 2\n");
-		  HAL_Delay(200);
-	  }
-	  else if (flag==2){
-		  flag=0;
-	  }
+	}
   }
 }
 
@@ -131,9 +140,10 @@ void read_and_save_correct_time_after_sleep()
 	  HAL_RTC_GetTime(&hrtc, &RTC_Time2, RTC_FORMAT_BIN);
 	  HAL_RTC_GetDate(&hrtc, &RTC_Date2, RTC_FORMAT_BIN);
 
-	  uint32_t seconds_slept = ((RTC_Time2.Seconds - RTC_Time1.Seconds) +
+	  /*uint8_t seconds_slept = ((RTC_Time2.Seconds - RTC_Time1.Seconds) +
 	                           ((RTC_Time2.Minutes - RTC_Time1.Minutes) * 60) +
-	                           ((RTC_Time2.Hours - RTC_Time1.Hours) * 3600));
+	                           ((RTC_Time2.Hours - RTC_Time1.Hours) * 3600));*/
+	  uint8_t seconds_slept = RTC_Time2.Seconds - RTC_Time1.Seconds;
 	  RTC_Time1.Seconds=RTC_Time1.Seconds+seconds_slept;
 	  if(RTC_Time1.Seconds>60){
 		  RTC_Time1.Seconds=RTC_Time1.Seconds-60;
@@ -159,7 +169,26 @@ void save_time_to_sleep()
 	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, currentTime.Seconds);
 }
 
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) //When we get interrupt (If DMA finish send data to LCD)
+{
+	if (hspi == &hspi2)
+	{
+		lcd_transfer_done();
+	}
+}
 
+void lcd_transfer_done(void)
+{
+	HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);
+}
+
+bool lcd_is_busy(void)
+{
+	if (HAL_SPI_GetState(&hspi2) == HAL_SPI_STATE_BUSY)
+		return true;
+	else
+		return false;
+}
 
 /* USER CODE END 0 */
 
@@ -199,8 +228,14 @@ int main(void)
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   HAL_IWDG_Refresh(&hiwdg);
-  read_and_save_correct_time_after_sleep();
+  //read_and_save_correct_time_after_sleep();
 
+  lcd_init();
+  for (int i = 0; i < 8; i++) {
+    hagl_draw_rounded_rectangle(2+i, 2+i, 158-i, 126-i, 8-i, rgb565(0, 0, i*16));
+  }
+  hagl_put_text(L"Hello World!", 40, 55, YELLOW, font6x9);
+  lcd_copy();
 
   /*** check if the SB flag i set ***/
   if (__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
@@ -329,7 +364,7 @@ int main(void)
   HAL_IWDG_Refresh(&hiwdg);
   IWDG_STDBY_FREEZE;
   IWDG_STOP_FREEZE;
-  save_time_to_sleep();
+  //save_time_to_sleep();
   HAL_PWR_EnterSTANDBYMode();
   /* USER CODE END 2 */
 
