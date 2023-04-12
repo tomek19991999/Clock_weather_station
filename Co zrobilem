@@ -4,4 +4,4 @@
 4. CZUJNIK TEMPERATURY I CISNIENIA
 5. WATCHDOG, wewnetrzny wbudowany generator RC
 6. ZEGAR RTC Z ZEWNETRZNEGO KWARCU
-7. 
+7. LCD, przesyl danych poprzez kontroler DMA

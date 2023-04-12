@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "i2c.h"
 #include "iwdg.h"
 #include "rtc.h"
@@ -32,7 +33,10 @@
 #include "lps25hb.h"
 #include "hagl.h"
 #include "font6x9.h"
+#include "font10x20.h"
 #include "rgb565.h"
+#include "wchar.h"
+#include "font9x18.h"
 
 
 /* USER CODE END Includes */
@@ -169,6 +173,165 @@ void save_time_to_sleep()
 	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, currentTime.Seconds);
 }
 
+void lps_temperature_pressure_measure()
+{
+	  printf("Searching...\n");
+	  if (lps25hb_init() == HAL_OK) {
+	    printf("OK: LPS25HB\n");
+	    lps25hb_one_shot();
+	    HAL_Delay(100);
+	    printf("T = %.1f*C\n", lps25hb_read_temp());
+	    printf("p = %.1f hPa\n", lps25hb_read_pressure()+14);
+
+	    wchar_t buffer[20];
+	    swprintf(buffer, 20, L"Temperatura: %.1f°C", lps25hb_read_temp()-2);
+	    hagl_put_text(buffer, 20, 75, YELLOW, font6x9);
+	    swprintf(buffer, 20, L"Cisnienie: %.0fhPa", lps25hb_read_pressure());
+	    hagl_put_text(buffer, 20, 95, YELLOW, font6x9);
+	    lcd_copy();
+
+	    RTC_TimeTypeDef time;
+	    RTC_DateTypeDef date;
+	    for(int i=0;i<2;i++){
+	  	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
+	  	  HAL_Delay(1000);
+	    }
+	  } else {
+	    printf("Error: LPS25HB not found\n");
+	    Error_Handler();
+	  }
+}
+
+void first_procedure_hour_change()
+{
+	  printf("Entering first procedure!\n");
+	  HAL_Delay(100);
+	  int16_t prev_value=0;
+	  uint8_t i=0;
+	  RTC_TimeTypeDef time;
+	  RTC_DateTypeDef date;
+	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  wchar_t buffer[20];
+	  for (int i = 0; i < 2; i++) {
+	    hagl_draw_rounded_rectangle(52+i, 30+i, 75-i, 55-i, 2-i, YELLOW);
+	  }
+	  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+	  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+	  lcd_copy();
+	  while(flag==1){
+		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
+		  if (value != prev_value) {
+			  //printf("value = %d\n", value);
+			  i++;
+			  if(value==prev_value+1){
+				  if(i==2)
+				  {
+					  HAL_IWDG_Refresh(&hiwdg);
+					  time.Hours=time.Hours+1;
+					  if(time.Hours==24) time.Hours=0;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Hours: %d\n", time.Hours);
+					  i=0;
+					  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+					  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+					  lcd_copy();
+				  }
+			  }
+			  if(value==prev_value-1){
+				  if(i==2)
+				  {
+					  HAL_IWDG_Refresh(&hiwdg);
+					  time.Hours=time.Hours-1;
+					  if(time.Hours==255) time.Hours=23;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Hours: %d\n", time.Hours);
+					  i=0;
+					  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+					  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+					  lcd_copy();
+				  }
+			  }
+			  prev_value = value;
+		  }
+	  }
+	  for (int i = 0; i < 2; i++) {
+	    hagl_draw_rounded_rectangle(52+i, 30+i, 75-i, 55-i, 2-i, BLACK);
+	  }
+}
+
+void second_procedure_minutes_change()
+{
+	  printf("Entering second procedure!\n");
+	  HAL_Delay(100);
+	  int16_t prev_value=0;
+	  uint8_t i=0;
+	  RTC_TimeTypeDef time;
+	  RTC_DateTypeDef date;
+	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  wchar_t buffer[20];
+	  for (int i = 0; i < 2; i++) {
+	    hagl_draw_rounded_rectangle(80+i, 30+i, 105-i, 55-i, 2-i, YELLOW);
+	  }
+	  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+	  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+	  lcd_copy();
+	  while(flag==2){
+		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
+		  if (value != prev_value) {
+			  //printf("value = %d\n", value);
+			  i++;
+			  if(value==prev_value+1){
+				  if(i==2)
+				  {
+					  HAL_IWDG_Refresh(&hiwdg);
+					  time.Minutes=time.Minutes+1;
+					  if(time.Minutes==60) time.Minutes=0;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Minutes: %d\n", time.Minutes);
+					  i=0;
+					  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+					  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+					  lcd_copy();
+				  }
+			  }
+			  if(value==prev_value-1){
+				  if(i==2)
+				  {
+					  HAL_IWDG_Refresh(&hiwdg);
+					  time.Minutes=time.Minutes-1;
+					  if(time.Minutes==255) time.Minutes=59;
+					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  printf("Minutes: %d\n", time.Minutes);
+					  i=0;
+					  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+					  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+					  lcd_copy();
+				  }
+			  }
+			  prev_value = value;
+		  }
+	  }
+	  for (int i = 0; i < 2; i++) {
+	    hagl_draw_rounded_rectangle(80+i, 30+i, 105-i, 55-i, 2-i, BLACK);
+	  }
+	  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+	  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+	  lcd_copy();
+
+	for(int i=0;i<1;i++){
+		RTC_TimeTypeDef time;
+		RTC_DateTypeDef date;
+	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
+	  HAL_Delay(100);
+	}
+}
+
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) //When we get interrupt (If DMA finish send data to LCD)
 {
 	if (hspi == &hspi2)
@@ -220,6 +383,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_RTC_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
@@ -234,129 +398,38 @@ int main(void)
   for (int i = 0; i < 8; i++) {
     hagl_draw_rounded_rectangle(2+i, 2+i, 158-i, 126-i, 8-i, rgb565(0, 0, i*16));
   }
-  hagl_put_text(L"Hello World!", 40, 55, YELLOW, font6x9);
+
+  RTC_TimeTypeDef time;
+  RTC_DateTypeDef date;
+  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
+
+  wchar_t buffer[20];
+  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
   lcd_copy();
 
   /*** check if the SB flag i set ***/
   if (__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
   {
-	  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB); //clear the flag (flag of low power mode)
-	  printf("Searching...\n");
-	  if (lps25hb_init() == HAL_OK) {
-	    printf("OK: LPS25HB\n");
-	    lps25hb_one_shot();
-	    HAL_Delay(100);
-	    printf("T = %.1f*C\n", lps25hb_read_temp());
-	    printf("p = %.1f hPa\n", lps25hb_read_pressure()+14);
-
-	    RTC_TimeTypeDef time;
-	    RTC_DateTypeDef date;
-	    for(int i=0;i<2;i++){
-	  	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
-	  	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
-	  	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
-	  	  HAL_Delay(1000);
-	    }
-
+	    __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB); //clear the flag (flag of low power mode)
+	    lps_temperature_pressure_measure();
 	    HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);   //disable PA0
-	  } else {
-	    printf("Error: LPS25HB not found\n");
-	    Error_Handler();
-	  }
-  }
+	    HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
 
-  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
-  /*SET HOURS*/
-  if(flag==1){
-	  printf("Entering first procedure!\n");
-	  HAL_Delay(100);
-	  int16_t prev_value=0;
-	  uint8_t i=0;
-	  RTC_TimeTypeDef time;
-	  RTC_DateTypeDef date;
-	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
-	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
-	  while(flag==1){
-		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
-		  if (value != prev_value) {
-			  //printf("value = %d\n", value);
-			  i++;
-			  if(value==prev_value+1){
-				  if(i==2)
-				  {
-					  time.Hours=time.Hours+1;
-					  if(time.Hours==24) time.Hours=0;
-					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
-					  printf("Hours: %d\n", time.Hours);
-					  i=0;
-				  }
-			  }
-			  if(value==prev_value-1){
-				  if(i==2)
-				  {
-					  time.Hours=time.Hours-1;
-					  if(time.Hours==255) time.Hours=23;
-					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
-					  printf("Hours: %d\n", time.Hours);
-					  i=0;
-				  }
-			  }
-			  prev_value = value;
-		  }
-	  }
-  }
+	    /*SET HOURS*/
+	    if(flag==1)
+	    {
+	  	  first_procedure_hour_change();
+	    }
 
-/*SET MINUTES*/
-  if(flag==2){
-	  printf("Entering second procedure!\n");
-	  HAL_Delay(100);
-	  int16_t prev_value=0;
-	  uint8_t i=0;
-	  RTC_TimeTypeDef time;
-	  RTC_DateTypeDef date;
-	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
-	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
-	  while(flag==2){
-		  int16_t value = __HAL_TIM_GET_COUNTER(&htim3);
-		  HAL_IWDG_Refresh(&hiwdg);
-		  if (value != prev_value) {
-			  //printf("value = %d\n", value);
-			  i++;
-			  if(value==prev_value+1){
-				  if(i==2)
-				  {
-					  time.Minutes=time.Minutes+1;
-					  if(time.Minutes==60) time.Minutes=0;
-					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
-					  printf("Minutes: %d\n", time.Minutes);
-					  i=0;
-				  }
-			  }
-			  if(value==prev_value-1){
-				  if(i==2)
-				  {
-					  time.Minutes=time.Minutes-1;
-					  if(time.Minutes==255) time.Minutes=59;
-					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
-					  printf("Minutes: %d\n", time.Minutes);
-					  i=0;
-				  }
-			  }
-			  prev_value = value;
-		  }
-	  }
-
-
-	    for(int i=0;i<1;i++){
-		    RTC_TimeTypeDef time;
-		    RTC_DateTypeDef date;
-	  	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
-	  	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
-	  	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
-	  	  HAL_Delay(100);
+	  /*SET MINUTES*/
+	    if(flag==2)
+	    {
+	  	  second_procedure_minutes_change();
 	    }
   }
-
 
   __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU); //clear wake-up flag before entry standby mode
   HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1_LOW);

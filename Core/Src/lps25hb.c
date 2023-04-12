@@ -81,6 +81,6 @@ float lps25hb_read_pressure(void)
      if (HAL_I2C_Mem_Read(&hi2c1, LPS25HB_ADDR, LPS25HB_PRESS_OUT_XL | 0x80, 1, (uint8_t*)&pressure, 3, TIMEOUT) != HAL_OK)
          Error_Handler();
 
-     return pressure / 4096.0f;
+     return (pressure / 4096.0f)+9;
 }
 
