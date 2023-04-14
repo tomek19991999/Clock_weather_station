@@ -38,7 +38,6 @@
 #include "wchar.h"
 #include "font9x18.h"
 
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -105,7 +104,8 @@ volatile uint8_t flag = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-
+  SystemClock_Config ();
+  HAL_ResumeTick();
   if (GPIO_Pin == USER_BUTTON_Pin) {
 	  static uint32_t last_interrupt_time = 0;
 	  uint32_t current_interrupt_time = HAL_GetTick();
@@ -126,7 +126,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		  }
 		  else if (flag==2){
 			  flag=0;
-
 	  }
 	}
   }
@@ -175,13 +174,14 @@ void save_time_to_sleep()
 
 void lps_temperature_pressure_measure()
 {
+	  printf("LPS measure init!\n");
 	  printf("Searching...\n");
 	  if (lps25hb_init() == HAL_OK) {
 	    printf("OK: LPS25HB\n");
 	    lps25hb_one_shot();
 	    HAL_Delay(100);
-	    printf("T = %.1f*C\n", lps25hb_read_temp());
-	    printf("p = %.1f hPa\n", lps25hb_read_pressure()+14);
+	    printf("T = %.1f*C\n", lps25hb_read_temp()-2);
+	    printf("p = %.1f hPa\n", lps25hb_read_pressure());
 
 	    wchar_t buffer[20];
 	    swprintf(buffer, 20, L"Temperatura: %.1f°C", lps25hb_read_temp()-2);
@@ -192,13 +192,11 @@ void lps_temperature_pressure_measure()
 
 	    RTC_TimeTypeDef time;
 	    RTC_DateTypeDef date;
-	    for(int i=0;i<2;i++){
-	  	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
-	  	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
-	  	  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
-	  	  HAL_Delay(1000);
-	    }
-	  } else {
+		HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+		HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+		printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
+	  }
+	  else {
 	    printf("Error: LPS25HB not found\n");
 	    Error_Handler();
 	  }
@@ -207,7 +205,6 @@ void lps_temperature_pressure_measure()
 void first_procedure_hour_change()
 {
 	  printf("Entering first procedure!\n");
-	  HAL_Delay(100);
 	  int16_t prev_value=0;
 	  uint8_t i=0;
 	  RTC_TimeTypeDef time;
@@ -215,6 +212,7 @@ void first_procedure_hour_change()
 	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
 	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
 	  wchar_t buffer[20];
+	  //draw rectangle at Hour
 	  for (int i = 0; i < 2; i++) {
 	    hagl_draw_rounded_rectangle(52+i, 30+i, 75-i, 55-i, 2-i, YELLOW);
 	  }
@@ -233,6 +231,9 @@ void first_procedure_hour_change()
 					  time.Hours=time.Hours+1;
 					  if(time.Hours==24) time.Hours=0;
 					  HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  HAL_RTC_SetDate(&hrtc, &date, RTC_FORMAT_BIN);
+					  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
 					  printf("Hours: %d\n", time.Hours);
 					  i=0;
 					  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
@@ -353,6 +354,33 @@ bool lcd_is_busy(void)
 		return false;
 }
 
+volatile uint8_t flag_lps=0;
+volatile uint8_t flag_check_time=0;
+
+void check_time()
+{
+	  printf("Time check init!\n");
+	  RTC_TimeTypeDef time;
+	  RTC_DateTypeDef date;
+	  HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
+	  HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+	  wchar_t buffer[20];
+	  swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
+	  hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
+	  lcd_copy();
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if (htim == &htim6) {
+	  flag_check_time=1;
+  }
+  if (htim == &htim7) {
+	  flag_lps=1;
+  }
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -390,11 +418,12 @@ int main(void)
   MX_SPI2_Init();
   MX_TIM3_Init();
   MX_IWDG_Init();
+  MX_TIM6_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
-  HAL_IWDG_Refresh(&hiwdg);
-  //read_and_save_correct_time_after_sleep();
 
   lcd_init();
+  printf("LCD initialization!\n");
   for (int i = 0; i < 8; i++) {
     hagl_draw_rounded_rectangle(2+i, 2+i, 158-i, 126-i, 8-i, rgb565(0, 0, i*16));
   }
@@ -403,48 +432,52 @@ int main(void)
   RTC_DateTypeDef date;
   HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
   HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
-  printf("Aktualny czas: %02d:%02d:%02d\n", time.Hours, time.Minutes, time.Seconds);
-
   wchar_t buffer[20];
   swprintf(buffer, 20, L"%02d:%02d", time.Hours, time.Minutes);
   hagl_put_text(buffer, 55, 35, YELLOW, font9x18);
-  lcd_copy();
 
-  /*** check if the SB flag i set ***/
-  if (__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET)
-  {
-	    __HAL_PWR_CLEAR_FLAG(PWR_FLAG_SB); //clear the flag (flag of low power mode)
-	    lps_temperature_pressure_measure();
-	    HAL_PWR_DisableWakeUpPin(PWR_WAKEUP_PIN1);   //disable PA0
-	    HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+  lps_temperature_pressure_measure();
 
-	    /*SET HOURS*/
-	    if(flag==1)
-	    {
-	  	  first_procedure_hour_change();
-	    }
-
-	  /*SET MINUTES*/
-	    if(flag==2)
-	    {
-	  	  second_procedure_minutes_change();
-	    }
-  }
-
-  __HAL_PWR_CLEAR_FLAG(PWR_FLAG_WU); //clear wake-up flag before entry standby mode
-  HAL_PWR_EnableWakeUpPin(PWR_WAKEUP_PIN1_LOW);
-  printf("Going sleep...\n");
-  HAL_IWDG_Refresh(&hiwdg);
-  IWDG_STDBY_FREEZE;
-  IWDG_STOP_FREEZE;
-  //save_time_to_sleep();
-  HAL_PWR_EnterSTANDBYMode();
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  HAL_IWDG_Refresh(&hiwdg);
+	  /*SET HOURS*/
+	  if(flag==1)
+	  {
+		  printf("First procedure!!\n");
+		  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+		  first_procedure_hour_change();
+	  }
+	  if(flag==2)
+	  {
+		  printf("Second procedure!\n");
+		  second_procedure_minutes_change();
+		  HAL_TIM_Encoder_Stop(&htim3, TIM_CHANNEL_ALL);
+	  }
+
+	  if(__HAL_TIM_GET_FLAG(&htim6, TIM_FLAG_UPDATE) != RESET) // Sprawdzenie flagi timera
+	  {
+		__HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE); // Wyczyszczenie flagi timera
+		check_time();
+	  }
+	  /*
+	  if(flag_check_time==1)
+	  {
+		  check_time();
+		  flag_check_time=0;
+	  }
+	  */
+	  if(flag_lps==1)
+	  {
+		  lps_temperature_pressure_measure();
+		  flag_lps=0;
+	  }
 
     /* USER CODE END WHILE */
 
